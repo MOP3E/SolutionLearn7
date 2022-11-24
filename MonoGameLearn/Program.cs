@@ -7,7 +7,7 @@ namespace MonoGameLearn
         [STAThread]
         static void Main()
         {
-            using (var game = new Learn())
+            using (Learn game = new Learn())
                 game.Run();
         }
     }

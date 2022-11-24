@@ -31,15 +31,51 @@ namespace MonoGameLearn
         private Matrix _localProjection;
         private Matrix _localView;
 
+        /// <summary>
+        /// Координаты игрока.
+        /// </summary>
+        private Vector2 _playerCoords = new Vector2(30, 220);
 
         /// <summary>
-        /// Текстура квардратика 128x128 пикселей.
+        /// Скорость движения игрока.
         /// </summary>
-        private Texture2D _square;
+        private float _playerSpeed = 400;
+        
+        /// <summary>
+        /// Очки игрока.
+        /// </summary>
+        private static int _playerScore = 0;
+
+        /// <summary>
+        /// Направление движения игрока.
+        /// </summary>
+        private int _playerDirection = 1;
+
+        /// <summary>
+        /// Размер игрока.
+        /// </summary>
+        private int _playerSize = 32;
+    
+        /// <summary>
+        /// Игровой бог.
+        /// </summary>
+        private static Random _random;
+        
+        /// <summary>
+        /// Координаты еды.
+        /// </summary>
+        private Vector2 _foodCoords;
+
+        /// <summary>
+        /// Размеры еды по вертикали и горизонтали.
+        /// </summary>
+        private static int _foodSize = 32;
 
         public Learn()
         {
             _graphics = new GraphicsDeviceManager(this);
+            _graphics.PreferredBackBufferWidth = 800;
+            _graphics.PreferredBackBufferHeight = 600;
             Content.RootDirectory = "Content";
             IsMouseVisible = true;
             Window.AllowUserResizing = true;
@@ -63,7 +99,8 @@ namespace MonoGameLearn
         /// </summary>
         protected override void Initialize()
         {
-            // TODO: Add your initialization logic here
+            _random = new Random((int)(DateTime.Now.Ticks & 0xFFFFFFFF));
+            _foodCoords = new Vector2(_random.Next(0, 800 - _foodSize), _random.Next(0, 600 - _foodSize));
 
             base.Initialize();
         }
@@ -81,8 +118,6 @@ namespace MonoGameLearn
             _localProjection = Matrix.CreateOrthographicOffCenter(0f, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height, 0f, 0f, 1f);
             _localView = Matrix.Identity;
 
-            _square = Texture2D.FromFile(_graphics.GraphicsDevice, @"Content\square128.png");
-
             // TODO: use this.Content to load your game content here
         }
 
@@ -96,7 +131,26 @@ namespace MonoGameLearn
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
-            // TODO: Add your update logic here
+            MovePlayer(gameTime);
+
+            //обнаружение столкновения с едой
+            if (_playerCoords.X + _playerSize > _foodCoords.X && _foodCoords.X + _foodSize > _playerCoords.X && 
+                _playerCoords.Y + _playerSize > _foodCoords.Y && _foodCoords.Y + _foodSize > _playerCoords.Y)
+            {
+                //разместить новую еду
+                _foodCoords.X = _random.Next(0, 800 - _foodSize);
+                _foodCoords.Y = _random.Next(0, 600 - _foodSize);
+       
+                //посчитать очки и повысить сложность игры
+                _playerScore += 1;
+                _playerSpeed += 10;
+            }
+            
+            //обнаружение выхода за пределы экрана (проигрыш)
+            if (_playerCoords.X < 0 || _playerCoords.X > 800 - _playerSize || _playerCoords.Y < 0 || _playerCoords.Y > 600 - _playerSize)
+            {
+                //TODO: код завершения игры
+            }
 
             base.Update(gameTime);
         }
@@ -111,23 +165,47 @@ namespace MonoGameLearn
 
             _primitiveBatch.Begin(ref _localProjection, ref _localView);
 
-            _primitiveDrawing.DrawSegment(new Vector2(10,10), new Vector2(20, 100), Color.Red);
+            DrawPlayer();
+            DrawFood();
 
             _primitiveBatch.End();
 
-
-            //_spriteBatch.Begin();
-            //for (int j = 0, y = 0; y < _graphics.GraphicsDevice.PresentationParameters.BackBufferHeight; j++, y+=128)
-            //{
-            //    for (int i = 0, x = 0; x < _graphics.GraphicsDevice.PresentationParameters.BackBufferWidth; i++, x+=128)
-            //    {
-            //        _spriteBatch.Draw(_square, new Vector2(x, y), (i+j)%2 > 0 ? Color.DarkGreen : Color.White );
-            //    }
-            //}
-
-            //_spriteBatch.End();
-
             base.Draw(gameTime);
+        }
+
+        
+        /// <summary>
+        /// Перемещение игрока.
+        /// </summary>
+        private void MovePlayer(GameTime gameTime)
+        {
+            if (Keyboard.GetState().IsKeyDown(Keys.Up)) _playerDirection = 0;
+            if (Keyboard.GetState().IsKeyDown(Keys.NumPad8)) _playerDirection = 0;
+            if (Keyboard.GetState().IsKeyDown(Keys.Right)) _playerDirection = 1;
+            if (Keyboard.GetState().IsKeyDown(Keys.NumPad6)) _playerDirection = 1;
+            if (Keyboard.GetState().IsKeyDown(Keys.Down)) _playerDirection = 2;
+            if (Keyboard.GetState().IsKeyDown(Keys.NumPad2)) _playerDirection = 2;
+            if (Keyboard.GetState().IsKeyDown(Keys.Left)) _playerDirection = 3;
+            if (Keyboard.GetState().IsKeyDown(Keys.NumPad4)) _playerDirection = 4;
+
+            float deltaTime = (float)gameTime.ElapsedGameTime.Milliseconds / 1000.0f;
+            if (_playerDirection == 0) _playerCoords.Y -= _playerSpeed * deltaTime;
+            if (_playerDirection == 1) _playerCoords.X += _playerSpeed * deltaTime;
+            if (_playerDirection == 2) _playerCoords.Y += _playerSpeed * deltaTime;
+            if (_playerDirection == 3) _playerCoords.X -= _playerSpeed * deltaTime;
+        }
+
+        /// <summary>
+        /// Отрисовка игрока.
+        /// </summary>
+        private void DrawPlayer()
+        {
+            _primitiveDrawing.DrawSolidRectangle(_playerCoords, _playerSize, _playerSize, Color.White);
+        }
+
+        private void DrawFood()
+        {
+            _primitiveDrawing.DrawSolidRectangle(_foodCoords, _foodSize, _foodSize, Color.Red);
         }
     }
 }
