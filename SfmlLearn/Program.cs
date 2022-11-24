@@ -89,7 +89,7 @@ class Program : Game
             //обнаружение выхода за пределы экрана (проигрыш)
             if (_playerX < 0 || _playerX > 800 - _playerSize || _playerY < 0 || _playerY > 600 - _playerSize)
             {
-
+                //TODO: код завершения игры
             }
 
             //Игровая логика.
