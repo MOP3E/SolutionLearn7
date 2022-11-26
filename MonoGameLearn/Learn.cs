@@ -1,8 +1,11 @@
 ﻿using System;
+using System.IO;
+using System.Numerics;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
-using MonoGame.Extended.VectorDraw;
+using Vector2 = Microsoft.Xna.Framework.Vector2;
 
 namespace MonoGameLearn
 {
@@ -17,19 +20,11 @@ namespace MonoGameLearn
         /// Задание для отрисовки спрайтов.
         /// </summary>
         private SpriteBatch _spriteBatch;
-
+            
         /// <summary>
-        /// Задание для отрисовки примитивов.
+        /// Игровой бог.
         /// </summary>
-        private PrimitiveBatch _primitiveBatch;
-        
-        /// <summary>
-        /// Рисовальщик примитивов.
-        /// </summary>
-        private PrimitiveDrawing _primitiveDrawing;
-        
-        private Matrix _localProjection;
-        private Matrix _localView;
+        private Random _random;
 
         /// <summary>
         /// Координаты игрока.
@@ -40,36 +35,87 @@ namespace MonoGameLearn
         /// Скорость движения игрока.
         /// </summary>
         private float _playerSpeed = 400;
-        
-        /// <summary>
-        /// Очки игрока.
-        /// </summary>
-        private static int _playerScore = 0;
 
         /// <summary>
         /// Направление движения игрока.
+        /// 0 - вверх, 1 - вправо, 2 - вниз, 3 - влево.
         /// </summary>
         private int _playerDirection = 1;
 
         /// <summary>
-        /// Размер игрока.
+        /// Текстура игрока.
         /// </summary>
-        private int _playerSize = 32;
-    
+        private Texture2D _playerTexture;
+
         /// <summary>
-        /// Игровой бог.
+        /// Положение спрайтов игрока на текстуре игрока.
         /// </summary>
-        private static Random _random;
+        private Vector2[] _playerSprires = { new Vector2(64, 64), new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 0) };
+
+        /// <summary>
+        /// Размер спрайов игрока.
+        /// </summary>
+        private Vector2[] _playerSize = { new Vector2(27, 56), new Vector2(56, 48), new Vector2(27, 56), new Vector2(56, 48) };
+
+        /// <summary>
+        /// Очки игрока.
+        /// </summary>
+        private int _playerScore = 0;
+
+        /// <summary>
+        /// Рекорд игрока.
+        /// </summary>
+        private int _playerRecord = 0;
         
+        /// <summary>
+        /// Звук съедания еды игроком.
+        /// </summary>
+        private SoundEffect _eatSound;
+
+        /// <summary>
+        /// Звук столкновения игрока с границами экрана.
+        /// </summary>
+        private SoundEffect _crashSound;
+
+        /// <summary>
+        /// Текстура еды.
+        /// </summary>
+        private Texture2D _foodTexture;
+
         /// <summary>
         /// Координаты еды.
         /// </summary>
         private Vector2 _foodCoords;
 
         /// <summary>
-        /// Размеры еды по вертикали и горизонтали.
+        /// Размеры еды.
         /// </summary>
-        private static int _foodSize = 32;
+        private Vector2 _foodSize = new Vector2(32, 28);
+        
+        /// <summary>
+        /// Игрок проиграл.
+        /// </summary>
+        private bool _lose = false;
+
+        /// <summary>
+        /// Фоновая текстура.
+        /// </summary>
+        private Texture2D _backgroundTexture;
+
+        /// <summary>
+        /// Фоновая музыка.
+        /// </summary>
+        private SoundEffect _backgroundMusic;
+
+        /// <summary>
+        /// Проигрыватель фоновой музыки.
+        /// </summary>
+        private SoundEffectInstance _backgroundMusicInstance;
+
+        /// <summary>
+        /// Шрифт для вывода сообщений на экран.
+        /// </summary>
+        private SpriteFont _mainFont;
 
         public Learn()
         {
@@ -77,21 +123,9 @@ namespace MonoGameLearn
             _graphics.PreferredBackBufferWidth = 800;
             _graphics.PreferredBackBufferHeight = 600;
             Content.RootDirectory = "Content";
-            IsMouseVisible = true;
-            Window.AllowUserResizing = true;
-            Window.Title = "Моя игра";
-
-            Window.ClientSizeChanged += WindowOnClientSizeChanged;
-        }
-
-        /// <summary>
-        /// Обработчик события изменения размера окна игры.
-        /// </summary>
-        private void WindowOnClientSizeChanged(object sender, EventArgs e)
-        {
-            _graphics.GraphicsDevice.PresentationParameters.BackBufferWidth = Window.ClientBounds.Width;
-            _graphics.GraphicsDevice.PresentationParameters.BackBufferHeight = Window.ClientBounds.Height;
-            _graphics.ApplyChanges();
+            IsMouseVisible = false;
+            Window.AllowUserResizing = false;
+            Window.Title = "Кошачье безумие";
         }
 
         /// <summary>
@@ -100,7 +134,8 @@ namespace MonoGameLearn
         protected override void Initialize()
         {
             _random = new Random((int)(DateTime.Now.Ticks & 0xFFFFFFFF));
-            _foodCoords = new Vector2(_random.Next(0, 800 - _foodSize), _random.Next(0, 600 - _foodSize));
+            //разместить еду в первый раз
+            PlaceFood();
 
             base.Initialize();
         }
@@ -110,15 +145,20 @@ namespace MonoGameLearn
         /// </summary>
         protected override void LoadContent()
         {
-            _spriteBatch = new SpriteBatch(GraphicsDevice);
+            _spriteBatch = new SpriteBatch(_graphics.GraphicsDevice);
 
-            //инициализация для рисования примитивов
-            _primitiveBatch = new PrimitiveBatch(GraphicsDevice);
-            _primitiveDrawing = new PrimitiveDrawing(_primitiveBatch);
-            _localProjection = Matrix.CreateOrthographicOffCenter(0f, GraphicsDevice.Viewport.Width, GraphicsDevice.Viewport.Height, 0f, 0f, 1f);
-            _localView = Matrix.Identity;
+            _playerTexture = Content.Load<Texture2D>(@"player");
+            _foodTexture = Content.Load<Texture2D>(@"food");
+            _eatSound = SoundEffect.FromStream(File.OpenRead(@"Content\meow_sound.wav"));
+            _crashSound = SoundEffect.FromStream(File.OpenRead(@"Content\cat_crash_sound.wav"));
 
-            // TODO: use this.Content to load your game content here
+            _backgroundTexture = Content.Load<Texture2D>(@"background");
+            _backgroundMusic = SoundEffect.FromStream(File.OpenRead(@"Content\bg_music.wav"));
+            _backgroundMusicInstance = _backgroundMusic.CreateInstance();
+            _backgroundMusicInstance.IsLooped = true;
+            _backgroundMusicInstance.Play();
+
+            _mainFont = Content.Load<SpriteFont>("ComicSans24");
         }
 
         /// <summary>
@@ -131,30 +171,54 @@ namespace MonoGameLearn
             if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
                 Exit();
 
-            MovePlayer(gameTime);
+            if (!_lose)
+            {
+                MovePlayer(gameTime);
 
-            //обнаружение столкновения с едой
-            if (_playerCoords.X + _playerSize > _foodCoords.X && _foodCoords.X + _foodSize > _playerCoords.X && 
-                _playerCoords.Y + _playerSize > _foodCoords.Y && _foodCoords.Y + _foodSize > _playerCoords.Y)
-            {
-                //разместить новую еду
-                _foodCoords.X = _random.Next(0, 800 - _foodSize);
-                _foodCoords.Y = _random.Next(0, 600 - _foodSize);
-       
-                //посчитать очки и повысить сложность игры
-                _playerScore += 1;
-                _playerSpeed += 10;
-            }
+                //обнаружение столкновения с едой
+                if (_playerCoords.X + _playerSize[_playerDirection].X > _foodCoords.X && _foodCoords.X + _foodSize.X > _playerCoords.X && 
+                    _playerCoords.Y + _playerSize[_playerDirection].Y > _foodCoords.Y && _foodCoords.Y + _foodSize.Y > _playerCoords.Y)
+                {
+                    //мяукнуть
+                    _eatSound.Play();
+                    //разместить новую еду
+                    PlaceFood();
+
+                    //посчитать очки и повысить сложность игры
+                    _playerScore += 1;
+                    _playerSpeed += 10;
+                }
             
-            //обнаружение выхода за пределы экрана (проигрыш)
-            if (_playerCoords.X < 0 || _playerCoords.X > 800 - _playerSize || _playerCoords.Y < 0 || _playerCoords.Y > 600 - _playerSize)
+                //обнаружение выхода за пределы экрана (проигрыш)
+                if (_playerCoords.X < 0 || _playerCoords.X > 800 - _playerSize[_playerDirection].X || _playerCoords.Y < 168 || _playerCoords.Y > 600 - _playerSize[_playerDirection].Y)
+                {
+                    //стукнуться об стену
+                    _crashSound.Play();
+                    //сохранить рекорд
+                    if (_playerRecord < _playerScore) _playerRecord = _playerScore;
+                    //завершить игру
+                    _lose = true;
+                }
+            }
+            else
             {
-                //TODO: код завершения игры
+                //перезапуск по нажатию Enter
+                if (Keyboard.GetState().IsKeyDown(Keys.Enter))
+                {
+                    //перезапуск игры - сбросить проигрыш, очки, заново разместить игрока и еду
+                    _lose = false;
+                    _playerCoords.X = 30;
+                    _playerCoords.Y = 220;
+                    _playerSpeed = 400;
+                    _playerDirection = 1;
+                    _playerScore = 0;
+                    PlaceFood();
+                }
             }
 
             base.Update(gameTime);
         }
-
+        
         /// <summary>
         /// Перерисовка экрана.
         /// </summary>
@@ -163,17 +227,15 @@ namespace MonoGameLearn
         {
             GraphicsDevice.Clear(Color.CornflowerBlue);
 
-            _primitiveBatch.Begin(ref _localProjection, ref _localView);
+            _spriteBatch.Begin();
 
-            DrawPlayer();
-            DrawFood();
+            DrawScreen();
 
-            _primitiveBatch.End();
+            _spriteBatch.End();
 
             base.Draw(gameTime);
         }
 
-        
         /// <summary>
         /// Перемещение игрока.
         /// </summary>
@@ -196,16 +258,54 @@ namespace MonoGameLearn
         }
 
         /// <summary>
+        /// Размещение еды.
+        /// </summary>
+        private void PlaceFood()
+        {
+            _foodCoords.X = _random.Next(0, 800 - (int)_foodSize.X);
+            _foodCoords.Y = _random.Next(168, 600 - (int)_foodSize.Y);
+        }
+        
+        /// <summary>
+        /// Отрисовка текущего состояния экрана.
+        /// </summary>
+        private void DrawScreen()
+        {
+            //нарисовать задний фон
+            _spriteBatch.Draw(_backgroundTexture, Vector2.Zero, Color.White);
+            //нарисовать игрока
+            DrawPlayer();
+            //нарисовать еду
+            if(!_lose) DrawFood();
+            //вывести на экран очки игрока
+            _spriteBatch.DrawString(_mainFont, $"Съедено {(_playerScore == 0 ? "-" : _playerScore.ToString())}", new Vector2(5, 0), Color.Black);
+            //вывести на экран рекорд игрока
+            _spriteBatch.DrawString(_mainFont, $"Рекорд {(_playerRecord == 0 ? "-" : _playerRecord.ToString())}", new Vector2(665, 0), Color.Black);
+            //нарисовать сообщение об окончании игры
+            if(_lose)
+            {
+                _spriteBatch.DrawString(_mainFont, "Ну и чего ты носишься по кухне?!", new Vector2(202, 300), Color.Black);
+                _spriteBatch.DrawString(_mainFont, "Нажми [ENTER] чтобы перезапустить игру!", new Vector2(147, 350), Color.Black);
+            }
+        }
+
+        /// <summary>
         /// Отрисовка игрока.
         /// </summary>
         private void DrawPlayer()
         {
-            _primitiveDrawing.DrawSolidRectangle(_playerCoords, _playerSize, _playerSize, Color.White);
+            _spriteBatch.Draw(_playerTexture,
+                _playerCoords,
+                new Rectangle((int)_playerSprires[_playerDirection].X,
+                    (int)_playerSprires[_playerDirection].Y,
+                    (int)_playerSize[_playerDirection].X,
+                    (int)_playerSize[_playerDirection].Y),
+                Color.White);
         }
 
         private void DrawFood()
         {
-            _primitiveDrawing.DrawSolidRectangle(_foodCoords, _foodSize, _foodSize, Color.Red);
+            _spriteBatch.Draw(_foodTexture, _foodCoords, new Rectangle(0, 2, (int)_foodSize.X, (int)_foodSize.Y), Color.White);
         }
     }
 }
